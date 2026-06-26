@@ -1,0 +1,170 @@
+{
+  "name": "WhatsApp Auto-Coder",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "auto-coder",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-1",
+      "name": "WhatsApp Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 300],
+      "webhookId": "auto-coder-wh"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body;\n\nlet message = '';\nlet from = '';\nlet timestamp = '';\n\nif (body.Body && body.From) {\n  message = body.Body;\n  from = body.From;\n  timestamp = body.MessageSid || new Date().toISOString();\n} else if (body.entry && body.entry[0] && body.entry[0].changes) {\n  const change = body.entry[0].changes[0];\n  if (change.value && change.value.messages && change.value.messages[0]) {\n    const msg = change.value.messages[0];\n    message = msg.text?.body || '';\n    from = msg.from || '';\n    timestamp = new Date().toISOString();\n  }\n} else {\n  message = typeof body === 'string' ? body : JSON.stringify(body);\n  from = 'unknown';\n  timestamp = new Date().toISOString();\n}\n\nfunction extractRepoName(msg) {\n  if (!msg) return null;\n  const patterns = [\n    /(?:in|to|for|create)\\s+(?:repo|repository|project)\\s+([a-zA-Z0-9_-]+)/i,\n    /(?:repo|repository|project)\\s+([a-zA-Z0-9_-]+)/i,\n  ];\n  for (const p of patterns) {\n    const m = msg.match(p);\n    if (m) return m[1].toLowerCase().replace(/[^a-z0-9_-]/g, '-');\n  }\n  return null;\n}\n\nfunction extractAction(msg) {\n  if (!msg) return 'build';\n  const l = msg.toLowerCase();\n  if (l.includes('fix') || l.includes('bug')) return 'fix';\n  if (l.includes('scaffold') || l.includes('init')) return 'scaffold';\n  if (l.includes('refactor')) return 'refactor';\n  if (l.includes('test')) return 'test';\n  if (l.includes('deploy')) return 'deploy';\n  return 'build';\n}\n\nconst repoName = extractRepoName(message);\n\nreturn [{\n  json: {\n    task: message,\n    from,\n    timestamp,\n    repoName: repoName || `auto-project-${Date.now()}`,\n    action: extractAction(message),\n    safeRepoName: (repoName || `project-${Date.now()}`).replace(/[^a-zA-Z0-9_-]/g, '')\n  }\n}];"
+      },
+      "id": "wh-2",
+      "name": "Parse WhatsApp Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const FORBIDDEN = [\n  /\\brm\\s+-rf\\s+\\//i,\n  /\\bdrop\\s+table\\b/i,\n  /\\bdrop\\s+database\\b/i,\n  /\\bforce\\s+push\\b.*\\bmain\\b/i,\n  /\\bgit\\s+push\\s+--force\\b.*\\b(main|master)\\b/i,\n  /\\bsudo\\b/i,\n  /\\bchmod\\s+777\\b/i,\n  /\\bcurl\\b.*\\|\\s*bash\\b/i,\n];\n\nconst DANGEROUS = ['delete production','drop production','wipe database','destroy','nuke','rm -rf'];\nconst task = ($input.first().json.task || '').toLowerCase();\n\nfor (const p of FORBIDDEN) {\n  if (p.test(task)) {\n    return [{ json: { safe: false, reason: `Blocked: ${p.source}`, requiresConfirmation: false, task: $input.first().json.task } }];\n  }\n}\n\nfor (const kw of DANGEROUS) {\n  if (task.includes(kw)) {\n    return [{ json: { safe: false, reason: `Dangerous keyword: ${kw}`, requiresConfirmation: true, task: $input.first().json.task } }];\n  }\n}\n\nreturn [{ json: { safe: true, reason: 'Passed', requiresConfirmation: false, task: $input.first().json.task } }];"
+      },
+      "id": "wh-3",
+      "name": "Safety Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "cond-safe",
+              "leftValue": "={{ $json.safe }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "wh-4",
+      "name": "Is Safe?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [910, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'rejected', message: `Task rejected by safety gate: ${$json.reason}`, requiresConfirmation: $json.requiresConfirmation }) }}",
+        "options": { "responseHeaders": { "entries": [{ "name": "Content-Type", "value": "application/json" }] } }
+      },
+      "id": "wh-5",
+      "name": "Reject Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1130, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'needs_confirmation', message: `Task requires confirmation: ${$json.reason}`, task: $json.task }) }}",
+        "options": {}
+      },
+      "id": "wh-6",
+      "name": "Confirmation Needed",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1130, 200]
+    },
+    {
+      "parameters": {
+        "model": "openrouter/owl-alpha",
+        "prompt": {
+          "text": "You are an autonomous coding agent orchestrator. A user sent this WhatsApp task:\n\nTASK: {{ $json.task }}\nREPO_NAME: {{ $json.repoName }}\nACTION: {{ $json.action }}\n\nBuild a detailed prompt for Claude Code to scaffold the project.\nWorkspace: C:\\tmp\\auto-coder\\{{ $json.safeRepoName }}\nInclude instructions for production-quality code with README.md.\n\nOutput ONLY valid JSON (no markdown):\n{ \"status\": \"success|failure|needs_confirmation\", \"summary\": \"What to build\", \"claudePrompt\": \"The full prompt for claude -p\", \"workspace\": \"C:\\tmp\\auto-coder\\{{ $json.safeRepoName }}\", \"repoName\": \"{{ $json.repoName }}\", \"needsConfirmation\": false }"
+        },
+        "options": { "temperature": 0.3, "maxTokens": 4096 }
+      },
+      "id": "wh-7",
+      "name": "Agent (OWL)",
+      "type": "n8n-nodes-base.agent",
+      "typeVersion": 1,
+      "position": [1130, 0]
+    },
+    {
+      "parameters": {
+        "command": "=claude -p \"{{ $json.claudePrompt }}\" --workspace {{ $json.workspace }} 2>&1",
+        "timeout": 600,
+        "options": {}
+      },
+      "id": "wh-8",
+      "name": "Execute Claude Code",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1350, 0]
+    },
+    {
+      "parameters": {
+        "operation": "executeWorkflow",
+        "workflowId": "={{$env.GITHUB_PIPELINE_WORKFLOW_ID}}",
+        "options": {}
+      },
+      "id": "wh-9",
+      "name": "GitHub Pipeline",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1570, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'success', message: 'Project built and deployed', repoUrl: $json.repoUrl || null, prUrl: $json.prUrl || null }) }}",
+        "options": {}
+      },
+      "id": "wh-10",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1790, 0]
+    },
+    {
+      "parameters": {},
+      "id": "wh-err-1",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [1350, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'error', message: 'Execution error', error: $json.error?.message || 'Unknown' }) }}",
+        "options": {}
+      },
+      "id": "wh-err-2",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1570, 300]
+    }
+  ],
+  "connections": {
+    "WhatsApp Webhook": { "main": [[{ "node": "Parse WhatsApp Message", "type": "main", "index": 0 }]] },
+    "Parse WhatsApp Message": { "main": [[{ "node": "Safety Gate", "type": "main", "index": 0 }]] },
+    "Safety Gate": { "main": [[{ "node": "Is Safe?", "type": "main", "index": 0 }]] },
+    "Is Safe?": { "main": [[{ "node": "Agent (OWL)", "type": "main", "index": 0 }, { "node": "Confirmation Needed", "type": "main", "index": 0 }], [{ "node": "Reject Response", "type": "main", "index": 0 }]] },
+    "Agent (OWL)": { "main": [[{ "node": "Execute Claude Code", "type": "main", "index": 0 }]] },
+    "Execute Claude Code": { "main": [[{ "node": "GitHub Pipeline", "type": "main", "index": 0 }]] },
+    "GitHub Pipeline": { "main": [[{ "node": "Success Response", "type": "main", "index": 0 }]] },
+    "Error Trigger": { "main": [[{ "node": "Error Response", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true, "callerPolicy": "workflowsFromSameOwner" },
+  "staticData": null,
+  "tags": [{ "name": "auto-coder" }, { "name": "whatsapp" }],
+  "triggerCount": 0,
+  "versionId": "1"
+}

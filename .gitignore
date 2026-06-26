@@ -1,0 +1,38 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+.npm/
+.pnp
+.pnp.js
+
+# Build
+dist/
+build/
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+node_modules/.cache/
+
+# n8n
+.n8n/
+.n8n.local.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Auto-Coder workspace
+C:\tmp\auto-coder\*
+tmp/auto-coder/*

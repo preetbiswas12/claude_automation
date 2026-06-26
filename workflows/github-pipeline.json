@@ -1,0 +1,174 @@
+{
+  "name": "GitHub Pipeline",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "gh-1",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const repoName = $input.first().json.repoName || 'auto-project';\nconst workspace = $input.first().json.workspace || `C:\\\\tmp\\\\auto-coder\\\\${repoName}`;\nconst owner = $env.GITHUB_OWNER || 'preetbiswas12';\n\nreturn [{\n  json: {\n    repoName,\n    workspace,\n    owner,\n    repoFullName: `${owner}/${repoName}`,\n    remoteUrl: `https://x-access-token:${$env.GITHUB_TOKEN}@github.com/${owner}/${repoName}.git`,\n    branchName: `feature/auto-build-${Date.now()}`,\n    commitMessage: 'Auto-generated project by Auto-Coder Agent',\n    prTitle: 'Auto-Coder: New project build',\n    prBody: `This project was automatically built by the Auto-Coder Agent.\\n\\n- Workspace: ${workspace}\\n- Generated: ${new Date().toISOString()}\\n- Triggered via WhatsApp`\n  }\n}];"
+      },
+      "id": "gh-2",
+      "name": "Prepare Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "command": "=gh repo create {{ $json.repoName }} --public --clone=false 2>&1 || echo 'REPO_EXISTS_OR_ERROR'",
+        "timeout": 60,
+        "options": {}
+      },
+      "id": "gh-3",
+      "name": "Create Repo (if needed)",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "command": "=cd \"{{ $json.workspace }}\" && git init && git config user.email \"agent@autocoder.dev\" && git config user.name \"Auto-Coder Agent\" && git remote add origin \"{{ $json.remoteUrl }}\" 2>/dev/null || git remote set-url origin \"{{ $json.remoteUrl }}\"",
+        "timeout": 30,
+        "options": {}
+      },
+      "id": "gh-4",
+      "name": "Git Init & Remote",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [910, 300]
+    },
+    {
+      "parameters": {
+        "command": "=cd \"{{ $json.workspace }}\" && git checkout -b \"{{ $json.branchName }}\" 2>&1 && git add . && git commit -m \"{{ $json.commitMessage }}\" 2>&1",
+        "timeout": 30,
+        "options": {}
+      },
+      "id": "gh-5",
+      "name": "Git Commit",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1130, 300]
+    },
+    {
+      "parameters": {
+        "command": "=cd \"{{ $json.workspace }}\" && git push -u origin \"{{ $json.branchName }}\" 2>&1",
+        "timeout": 60,
+        "options": {}
+      },
+      "id": "gh-6",
+      "name": "Git Push",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1350, 300]
+    },
+    {
+      "parameters": {
+        "command": "=cd \"{{ $json.workspace }}\" && gh pr create --base main --head \"{{ $json.branchName }}\" --title \"{{ $json.prTitle }}\" --body \"{{ $json.prBody }}\" 2>&1",
+        "timeout": 60,
+        "options": {}
+      },
+      "id": "gh-7",
+      "name": "Create PR",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1570, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "cond-auto-merge",
+              "leftValue": "={{ $env.AUTO_MERGE_ENABLED || 'true' }}",
+              "rightValue": "true",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "gh-8",
+      "name": "Auto-Merge Enabled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1790, 300]
+    },
+    {
+      "parameters": {
+        "command": "=cd \"{{ $json.workspace }}\" && gh pr merge --merge --delete-branch 2>&1",
+        "timeout": 60,
+        "options": {}
+      },
+      "id": "gh-9",
+      "name": "Merge PR",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [2010, 200]
+    },
+    {
+      "parameters": {
+        "command": "=cd \"{{ $json.workspace }}\" && gh pr view --json url 2>&1",
+        "timeout": 30,
+        "options": {}
+      },
+      "id": "gh-10",
+      "name": "Get PR URL",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [2230, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const prUrl = $input.first().json.stdout || '';\nconst match = prUrl.match(/https:\\/\\/github\\.com\\/.+\\/pull\\/\\d+/);\n\nreturn [{\n  json: {\n    status: 'success',\n    repoUrl: `https://github.com/{{ $('Prepare Config').item.json.repoFullName }}`,\n    prUrl: match ? match[0] : prUrl.trim(),\n    branchName: $('Prepare Config').item.json.branchName,\n    merged: $env.AUTO_MERGE_ENABLED !== 'false'\n  }\n}];"
+      },
+      "id": "gh-11",
+      "name": "Output Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2450, 300]
+    },
+    {
+      "parameters": {},
+      "id": "gh-err-1",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [1130, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { status: 'error', error: $json.error?.message || 'Unknown error in GitHub pipeline', repoName: $('Prepare Config').item.json.repoName } }];"
+      },
+      "id": "gh-err-2",
+      "name": "Error Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1350, 500]
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": { "main": [[{ "node": "Prepare Config", "type": "main", "index": 0 }]] },
+    "Prepare Config": { "main": [[{ "node": "Create Repo (if needed)", "type": "main", "index": 0 }]] },
+    "Create Repo (if needed)": { "main": [[{ "node": "Git Init & Remote", "type": "main", "index": 0 }]] },
+    "Git Init & Remote": { "main": [[{ "node": "Git Commit", "type": "main", "index": 0 }]] },
+    "Git Commit": { "main": [[{ "node": "Git Push", "type": "main", "index": 0 }]] },
+    "Git Push": { "main": [[{ "node": "Create PR", "type": "main", "index": 0 }]] },
+    "Create PR": { "main": [[{ "node": "Auto-Merge Enabled?", "type": "main", "index": 0 }]] },
+    "Auto-Merge Enabled?": { "main": [[{ "node": "Merge PR", "type": "main", "index": 0 }], [{ "node": "Get PR URL", "type": "main", "index": 0 }]] },
+    "Merge PR": { "main": [[{ "node": "Get PR URL", "type": "main", "index": 0 }]] },
+    "Get PR URL": { "main": [[{ "node": "Output Result", "type": "main", "index": 0 }]] },
+    "Error Trigger": { "main": [[{ "node": "Error Output", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "staticData": null,
+  "tags": [{ "name": "github" }, { "name": "auto-coder" }],
+  "triggerCount": 0,
+  "versionId": "1"
+}

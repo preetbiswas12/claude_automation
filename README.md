@@ -50,13 +50,54 @@ tools_documentation
 | Multi-Level Validation | Quick check → Full validation → Workflow validation → Post-deployment |
 | Never Trust Defaults | Explicitly configure every parameter that controls behavior |
 
+## WhatsApp Auto-Coder
+
+This repo includes an autonomous n8n workflow that turns WhatsApp messages into GitHub PRs. Send a task via WhatsApp, get a built project pushed and merged.
+
+### Architecture
+
+```
+WhatsApp (Twilio/Meta webhook)
+    ↓
+n8n Webhook Trigger
+    ↓
+Parse Message → Safety Gate → OWL Agent (OpenRouter)
+    ↓
+Claude Code (headless `claude -p`)
+    ↓
+GitHub Pipeline (gh CLI: repo → push → PR → merge)
+    ↓
+WhatsApp response (status update)
+```
+
+### Quick Start
+
+1. Copy `.env.example` to `.env` and fill in credentials
+2. Import workflows into n8n:
+   ```bash
+   n8n import:workflow --input=workflows/whatsapp-auto-coder.json
+   n8n import:workflow --input=workflows/github-pipeline.json
+   ```
+3. Configure WhatsApp webhook to point to `http://<n8n-host>:5678/webhook/auto-coder`
+4. Activate the workflow and send a test message
+
 ## Project Structure
 
 ```
 .
-├── .mcp.json          # MCP server configuration (n8n-mcp)
-├── CLAUDE.md          # Operating instructions for Claude Code
-└── README.md          # This file
+├── .env.example              # Environment variable template for Auto-Coder
+├── .env                     # Your secrets (gitignored)
+├── CLAUDE.md                # Operating instructions for Claude Code
+├── README.md                # This file
+├── scripts/
+│   ├── parse-whatsapp.js    # WhatsApp message parser (reference)
+│   └── safety-check.js      # Safety gate logic (reference)
+├── prompts/
+│   ├── agent-system-prompt.md    # OWL agent system prompt (reference)
+│   └── claude-code-template.md    # Claude Code prompt template (reference)
+└── workflows/
+    ├── whatsapp-auto-coder.json    # Main Auto-Coder workflow (import into n8n)
+    └── github-pipeline.json        # GitHub sub-workflow (import into n8n)
 ```
 
 ## Security Note

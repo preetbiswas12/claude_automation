@@ -1,4 +1,47 @@
-You are an expert in n8n automation software using n8n-MCP tools. Your role is to design, build, and validate n8n workflows with maximum accuracy and efficiency.
+# Claude Code Automation for n8n
+
+A Claude Code workspace for designing, building, validating, and deploying n8n workflows through the n8n MCP (Model Context Protocol) server.
+
+## Prerequisites
+
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (CLI or desktop)
+- Node.js + npx (for the `n8n-mcp` server)
+- A reachable n8n instance with API access
+
+## Project Structure
+
+```
+.
+├── .mcp.json          # MCP server config (n8n-mcp command, env vars)
+├── .claude/
+│   └── settings.local.json  # Enables n8n-mcp as a project MCP server
+├── CLAUDE.md          # This file — operating instructions for Claude Code
+└── README.md          # Project overview & setup guide
+```
+
+## How the MCP Server Works
+
+Claude Code loads the `n8n-mcp` server from `.mcp.json` (enabled via `.claude/settings.local.json`). The server runs as:
+
+```
+npx n8n-mcp
+```
+
+with environment variables set in `.mcp.json`:
+
+| Variable | Purpose |
+|----------|---------|
+| `MCP_MODE` | Transport protocol — `stdio` for Claude Code integration |
+| `LOG_LEVEL` | Server log verbosity (`error` keeps output minimal) |
+| `DISABLE_CONSOLE_OUTPUT` | Suppresses non-MCP stdout noise |
+| `N8N_API_URL` | Base URL of the target n8n instance |
+| `N8N_API_KEY` | JWT API key for the n8n public API |
+
+The `n8n-mcp` package runs entirely via `npx` — no `package.json` or local install is needed in this repo. When the Claude Code session starts, the MCP server starts automatically and exposes n8n tools (template search, node inspection, validation, deployment).
+
+**Security note:** `.mcp.json` currently contains `N8N_API_KEY` in plaintext. Before committing or pushing:
+1. Move the key to a `.env` file and add `.env` to `.gitignore`
+2. Reference `env` vars in `.mcp.json` via `process.env.N8N_API_KEY` substitution if supported, or load from `.env` in `.claude/settings.local.json`
 
 ## Core Principles
 
@@ -12,7 +55,7 @@ When operations are independent, execute them in parallel for maximum performanc
 ALWAYS check templates before building from scratch (2,352 available).
 
 ### 4. Multi-Level Validation
-Use validate_node(mode='minimal') → validate_node(mode='full') → validate_workflow pattern.
+Use validate_node(mode='minimal') -> validate_node(mode='full') -> validate_workflow pattern.
 
 ### 5. Never Trust Defaults
 CRITICAL: Default parameter values are the #1 source of runtime failures.
@@ -24,7 +67,7 @@ ALWAYS explicitly configure ALL parameters that control node behavior.
 
 2. **Template Discovery Phase** (FIRST - parallel when searching multiple)
    - `search_templates({searchMode: 'by_metadata', complexity: 'simple'})` - Smart filtering
-   - `search_templates({searchMode: 'by_task', task: 'webhook_processing'})` - Curated by task
+   - `search_templates({searchMode: 'by_task', task: 'webhook processing'})` - Curated by task
    - `search_templates({query: 'slack notification'})` - Text search (default searchMode='keyword')
    - `search_templates({searchMode: 'by_nodes', nodeTypes: ['n8n-nodes-base.slack']})` - By node type
 
@@ -115,8 +158,8 @@ Default values cause runtime failures. Example:
 [Silent tool execution in parallel]
 
 Created workflow:
-- Webhook trigger → Slack notification
-- Configured: POST /webhook → #general channel
+- Webhook trigger -> Slack notification
+- Configured: POST /webhook -> #general channel
 
 Validation: All checks passed
 ```
@@ -206,7 +249,7 @@ Use the same four-parameter format:
 1. **Silent execution** - No commentary between tools
 2. **Parallel by default** - Execute independent operations simultaneously
 3. **Templates first** - Always check before building (2,352 available)
-4. **Multi-level validation** - Quick check → Full validation → Workflow validation
+4. **Multi-level validation** - Quick check -> Full validation -> Workflow validation
 5. **Never trust defaults** - Explicitly configure ALL parameters
 
 ### Attribution & Credits
@@ -242,3 +285,9 @@ Use the same four-parameter format:
 20. **n8n-nodes-base.executeWorkflowTrigger** - Sub-workflow calls
 
 **Note:** LangChain nodes use the `@n8n/n8n-nodes-langchain.` prefix, core nodes use `n8n-nodes-base.`
+
+## Resources
+
+- [n8n Documentation](https://docs.n8n.io)
+- [n8n MCP Server (GitHub)](https://github.com/czlonkowski/n8n-mcp)
+- [n8n Templates](https://n8n.io/workflows)

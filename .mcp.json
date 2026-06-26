@@ -1,13 +1,13 @@
 {
   "mcpServers": {
     "n8n-mcp": {
-      "command": "npx",
-      "args": ["n8n-mcp"],
+      "command": "node",
+      "args": ["C:\\Users\\preet\\AppData\\Roaming\\npm\\node_modules\\n8n-mcp\\dist\\index.js"],
       "env": {
         "MCP_MODE": "stdio",
         "LOG_LEVEL": "error",
         "DISABLE_CONSOLE_OUTPUT": "true",
-        "N8N_API_URL": "https://preetn8n.qzz.io",
+        "N8N_API_URL": "https://qzz.io",
         "N8N_API_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJlNzFhYTYxNy1lMmEwLTRiN2UtODE3Ny01ZDE5Mjc2MjQ0ZjQiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzgyNDAyNDIyfQ.EW9vyNRNEXgrI8vb6V33qZx-Esp5vqi7m3BsicFfjFw"
       }
     }
